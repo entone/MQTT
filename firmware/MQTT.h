@@ -1,7 +1,6 @@
 /*
-MQTT library for Spark core
-
-Version 0.1: initial version
+MQTT library for Particle Core, Photon, Arduino
+This software is released under the MIT License.
 
 Copyright (c) 2014 Hirotaka Niisato
 Permission is hereby granted, free of charge, to any person obtaining
@@ -52,12 +51,17 @@ sample code bearing this copyright.
 #ifndef MQTT_h
 #define MQTT_h
 
+#if defined(SPARK) || (PLATFORM_ID==88)
 #include "spark_wiring_string.h"
 #include "spark_wiring_tcpclient.h"
 #include "spark_wiring_usbserial.h"
+#elif defined(ARDUINO)
+#include "Client.h"
+#endif
 
 // MQTT_MAX_PACKET_SIZE : Maximum packet size
-#define MQTT_MAX_PACKET_SIZE 128
+// this size is total of [MQTT Header(Max:5byte) + Topic Name Length + Topic Name + Message ID(QoS1|2) + Payload]
+#define MQTT_MAX_PACKET_SIZE 255
 
 // MQTT_KEEPALIVE : keepAlive interval in Seconds
 #define MQTT_KEEPALIVE 15
@@ -79,46 +83,72 @@ sample code bearing this copyright.
 #define MQTTDISCONNECT  14 << 4 // Client is Disconnecting
 #define MQTTReserved    15 << 4 // Reserved
 
-#define MQTTQOS0        (0 << 1)
-#define MQTTQOS1        (1 << 1)
-#define MQTTQOS2        (2 << 1)
-
 class MQTT {
+/** types */
+public:
+typedef enum{
+    QOS0 = 0,
+    QOS1 = 1,
+    QOS2 = 2,
+}EMQTT_QOS;
+
 private:
-   TCPClient _client;
-   uint8_t buffer[MQTT_MAX_PACKET_SIZE];
-   uint16_t nextMsgId;
-   unsigned long lastOutActivity;
-   unsigned long lastInActivity;
-   bool pingOutstanding;
-   void (*callback)(char*,uint8_t*,unsigned int);
-   uint16_t readPacket(uint8_t*);
-   uint8_t readByte();
-   boolean write(uint8_t header, uint8_t* buf, uint16_t length);
-   uint16_t writeString(char* string, uint8_t* buf, uint16_t pos);
-   String domain;
-   uint8_t *ip;
-   uint16_t port;
+#if defined(SPARK) || (PLATFORM_ID==88)
+    TCPClient *_client;
+#elif defined(ARDUINO)
+    Client *_client;
+#endif
+    uint8_t buffer[MQTT_MAX_PACKET_SIZE];
+    uint16_t nextMsgId;
+    unsigned long lastOutActivity;
+    unsigned long lastInActivity;
+    bool pingOutstanding;
+    void (*callback)(char*,uint8_t*,unsigned int);
+    void (*qoscallback)(unsigned int);
+    uint16_t readPacket(uint8_t*);
+    uint8_t readByte();
+    bool write(uint8_t header, uint8_t* buf, uint16_t length);
+    uint16_t writeString(const char* string, uint8_t* buf, uint16_t pos);
+    String domain;
+    uint8_t *ip;
+    uint16_t port;
 
 public:
-   MQTT();
+    MQTT();
+    
+    MQTT(char* domain, uint16_t port, void (*callback)(char*,uint8_t*,unsigned int)
+#if defined(SPARK) || (PLATFORM_ID==88)
+#elif defined(ARDUINO)
+        , Client& client
+#endif
+        );
+    MQTT(uint8_t *, uint16_t port, void (*callback)(char*,uint8_t*,unsigned int)
+#if defined(SPARK) || (PLATFORM_ID==88)
+#elif defined(ARDUINO)
+        , Client& client
+#endif
+        );
 
-   MQTT(char* domain, uint16_t port, void (*callback)(char*,uint8_t*,unsigned int));
-   MQTT(uint8_t *, uint16_t port, void (*callback)(char*,uint8_t*,unsigned int));
+    bool connect(const char *);
+    bool connect(const char *, const char *, const char *);
+    bool connect(const char *, const char *, EMQTT_QOS, uint8_t, const char *);
+    bool connect(const char *, const char *, const char *, const char *, EMQTT_QOS, uint8_t, const char*);
+    void disconnect();
+    
+    bool publish(const char *, const char *);
+    bool publish(const char *, const char *, EMQTT_QOS, uint16_t *messageid);
+    bool publish(const char *, const uint8_t *, unsigned int);
+    bool publish(const char *, const uint8_t *, unsigned int, EMQTT_QOS, uint16_t *messageid);
+    bool publish(const char *, const uint8_t *, unsigned int, bool);
+    bool publish(const char *, const uint8_t *, unsigned int, bool, EMQTT_QOS, uint16_t *messageid);
+    void addQosCallback(void (*qoscallback)(unsigned int));
+    bool publishRelease(uint16_t messageid);
 
-   boolean connect(char *);
-   boolean connect(char *, char *, char *);
-   boolean connect(char *, char *, uint8_t, uint8_t, char *);
-   boolean connect(char *, char *, char *, char *, uint8_t, uint8_t, char*);
-   void disconnect();
-   boolean publish(char *, char *);
-   boolean publish(char *, uint8_t *, unsigned int);
-   boolean publish(char *, uint8_t *, unsigned int, boolean);
-   boolean subscribe(char *);
-   boolean subscribe(char *, uint8_t qos);
-   boolean unsubscribe(char *);
-   boolean loop();
-   boolean isConnected();
+    bool subscribe(const char *);
+    bool subscribe(const char *, EMQTT_QOS);
+    bool unsubscribe(const char *);
+    bool loop();
+    bool isConnected();
 };
 
 
